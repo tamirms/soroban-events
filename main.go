@@ -6,8 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
+	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/bits-and-blooms/bloom/v3"
@@ -48,7 +51,7 @@ type eventsQuery struct {
 	limit      int
 }
 
-func queryBadger(db *badger.DB, bloomSize uint, query eventsQuery) error {
+func queryBadger(db *badger.DB, bloomSize uint, query eventsQuery) (time.Duration, error) {
 	var found []types.Log
 	start := time.Now()
 	err := db.View(func(txn *badger.Txn) error {
@@ -85,7 +88,6 @@ func queryBadger(db *badger.DB, bloomSize uint, query eventsQuery) error {
 					return err
 				}
 				if len(found) >= query.limit {
-					fmt.Println("last", block)
 					break
 				}
 			}
@@ -95,9 +97,8 @@ func queryBadger(db *badger.DB, bloomSize uint, query eventsQuery) error {
 	})
 
 	duration := time.Now().Sub(start)
-	fmt.Printf("found badger events %v %s\n", len(found), duration)
 
-	return err
+	return duration, err
 }
 
 func findEvents(it *badger.Iterator, query eventsQuery, found []types.Log) ([]types.Log, error) {
@@ -214,10 +215,10 @@ func writeBloomFilter(curBlock uint64, filter *bloom.BloomFilter, batch *badger.
 	return nil
 }
 
-func ingest(ingestCmd *flag.FlagSet) {
-	inputJSONFile := ingestCmd.String("input-json", "", "the json file containing the events")
-	badgerDBFile := ingestCmd.String("badger-db", "", "the location of the badger db")
-	ingestCmd.Parse(os.Args[2:])
+func ingestCmd(ingestFlags *flag.FlagSet) {
+	inputJSONFile := ingestFlags.String("input-json", "", "the json file containing the events")
+	badgerDBFile := ingestFlags.String("badger-db", "", "the location of the badger db")
+	ingestFlags.Parse(os.Args[2:])
 
 	file, err := os.Open(*inputJSONFile)
 	if err != nil {
@@ -237,12 +238,12 @@ func ingest(ingestCmd *flag.FlagSet) {
 	}
 }
 
-func query(queryCmd *flag.FlagSet) {
-	target := queryCmd.String("target", tetherAddress.String(), "the smart contract address which will be included in the filter")
-	startBlock := queryCmd.Uint64("start", 16007143, "the starting block which will be included in the filter")
-	endBlock := queryCmd.Uint64("end", 16007143+2000, "the ending block which will be included in the filter")
-	badgerDBFile := queryCmd.String("badger-db", "", "the location of the badger db")
-	queryCmd.Parse(os.Args[2:])
+func queryCmd(queryFlags *flag.FlagSet) {
+	target := queryFlags.String("target", tetherAddress.String(), "the smart contract address which will be included in the filter")
+	startBlock := queryFlags.Uint64("start", 16009543, "the starting block which will be included in the filter")
+	endBlock := queryFlags.Uint64("end", 16011543, "the ending block which will be included in the filter")
+	badgerDBFile := queryFlags.String("badger-db", "", "the location of the badger db")
+	queryFlags.Parse(os.Args[2:])
 
 	opts := badger.DefaultOptions(*badgerDBFile)
 	badgerDB, err := badger.Open(opts)
@@ -257,24 +258,96 @@ func query(queryCmd *flag.FlagSet) {
 		endBlock:   *endBlock,
 		limit:      defaultLimit,
 	}
-	if err := queryBadger(badgerDB, bloomSize, query); err != nil {
+	if duration, err := queryBadger(badgerDB, bloomSize, query); err != nil {
 		log.Fatalf("could not query badger for events %v", err)
+	} else {
+		fmt.Printf("completed query in %v\n", duration)
 	}
 }
 
+func benchmarkCmd(benchmarkFlags *flag.FlagSet) {
+	badgerDBFile := benchmarkFlags.String("badger-db", "", "the location of the badger db")
+	requestsFlag := benchmarkFlags.Int("requests", 100, "total number of requests")
+	target := benchmarkFlags.String("target", tetherAddress.String(), "the smart contract address which will be included in the filter")
+
+	benchmarkFlags.Parse(os.Args[2:])
+
+	opts := badger.DefaultOptions(*badgerDBFile).WithBlockCacheSize(512 << 20)
+	badgerDB, err := badger.Open(opts)
+	if err != nil {
+		log.Fatalf("cannot open badger db: %v", err)
+	}
+	defer badgerDB.Close()
+
+	totalRequests := *requestsFlag
+	targetAddress := common.HexToAddress(*target)
+
+	queue := make(chan eventsQuery, totalRequests)
+	results := make(chan time.Duration, totalRequests)
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for query := range queue {
+				if duration, err := queryBadger(badgerDB, bloomSize, query); err != nil {
+					log.Fatalf("could not query badger for events %v", err)
+				} else {
+					results <- duration
+				}
+			}
+		}()
+	}
+
+	lowerBound := int64(16007143)
+	upperBound := int64(16024423 - 2000)
+	diff := upperBound + 1 - lowerBound
+
+	startTime := time.Now()
+
+	for i := 0; i < totalRequests; i++ {
+		start := uint64(lowerBound + rand.Int63n(diff))
+		queue <- eventsQuery{
+			target:     targetAddress,
+			startBlock: start,
+			endBlock:   start + 2000,
+			limit:      defaultLimit,
+		}
+	}
+	close(queue)
+	wg.Wait()
+	close(results)
+
+	totalDuration := time.Since(startTime)
+
+	fmt.Printf("total duration %v\n", totalDuration)
+
+	var samples []int
+	for duration := range results {
+		samples = append(samples, int(duration.Milliseconds()))
+	}
+	sort.Sort(sort.IntSlice(samples))
+	fmt.Println(samples)
+}
+
 func main() {
-	ingestCmd := flag.NewFlagSet("ingest", flag.ExitOnError)
-	queryCmd := flag.NewFlagSet("query", flag.ExitOnError)
+	ingestFlags := flag.NewFlagSet("ingest", flag.ExitOnError)
+	queryFlags := flag.NewFlagSet("query", flag.ExitOnError)
+	benchmarkFlags := flag.NewFlagSet("benchmark", flag.ExitOnError)
 
 	if len(os.Args) < 2 {
 		log.Fatal("expected 'ingest' or 'query' subcommands")
 	}
 
 	switch os.Args[1] {
-	case ingestCmd.Name():
-		ingest(ingestCmd)
-	case queryCmd.Name():
-		query(queryCmd)
+	case ingestFlags.Name():
+		ingestCmd(ingestFlags)
+	case queryFlags.Name():
+		queryCmd(queryFlags)
+	case benchmarkFlags.Name():
+		benchmarkCmd(benchmarkFlags)
 	default:
 		log.Fatal("expected 'ingest' or 'query' subcommands")
 	}
