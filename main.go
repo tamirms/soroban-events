@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -268,6 +269,7 @@ func queryCmd(queryFlags *flag.FlagSet) {
 func benchmarkCmd(benchmarkFlags *flag.FlagSet) {
 	badgerDBFile := benchmarkFlags.String("badger-db", "", "the location of the badger db")
 	requestsFlag := benchmarkFlags.Int("requests", 100, "total number of requests")
+	threadsFlag := benchmarkFlags.Int("threads", runtime.NumCPU(), "number of goroutine workers")
 	target := benchmarkFlags.String("target", tetherAddress.String(), "the smart contract address which will be included in the filter")
 
 	benchmarkFlags.Parse(os.Args[2:])
@@ -284,10 +286,12 @@ func benchmarkCmd(benchmarkFlags *flag.FlagSet) {
 
 	queue := make(chan eventsQuery, totalRequests)
 	results := make(chan time.Duration, totalRequests)
+	threads := *threadsFlag
+	fmt.Printf("using %v cpus\n", threads)
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < 6; i++ {
+	for i := 0; i < threads; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
