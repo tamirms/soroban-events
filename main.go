@@ -58,7 +58,9 @@ func queryBadger(db *badger.DB, bloomSize uint, query eventsQuery) (time.Duratio
 	err := db.View(func(txn *badger.Txn) error {
 		bloomIt := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer bloomIt.Close()
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
 		defer it.Close()
 
 		startBloomKey := bloomKey(query.startBlock)
@@ -274,7 +276,7 @@ func benchmarkCmd(benchmarkFlags *flag.FlagSet) {
 
 	benchmarkFlags.Parse(os.Args[2:])
 
-	opts := badger.DefaultOptions(*badgerDBFile).WithBlockCacheSize(512 << 20)
+	opts := badger.DefaultOptions(*badgerDBFile)
 	badgerDB, err := badger.Open(opts)
 	if err != nil {
 		log.Fatalf("cannot open badger db: %v", err)
