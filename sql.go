@@ -72,6 +72,11 @@ func (e *sqlEventsDB) ingest(inputJSON io.Reader) (time.Duration, error) {
 	numEvents := 0
 	decoder := json.NewDecoder(inputJSON)
 
+	if err := e.session.Begin(); err != nil {
+		return 0, err
+	}
+	defer e.session.Rollback()
+
 	builder := db.BatchInsertBuilder{
 		Table:        e.session.GetTable("contract_events"),
 		MaxBatchSize: e.maxIngestBatchSize,
@@ -124,6 +129,10 @@ func (e *sqlEventsDB) ingest(inputJSON io.Reader) (time.Duration, error) {
 	}
 
 	if err := topicBuilder.Exec(context.Background()); err != nil {
+		return 0, err
+	}
+
+	if err := e.session.Commit(); err != nil {
 		return 0, err
 	}
 
