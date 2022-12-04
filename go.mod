@@ -3,16 +3,16 @@ module github.com/tamirms/soroban-events
 go 1.19
 
 require (
+	github.com/Masterminds/squirrel v1.5.0
 	github.com/bits-and-blooms/bloom/v3 v3.3.1
 	github.com/dgraph-io/badger/v3 v3.2103.4
 	github.com/ethereum/go-ethereum v1.10.26
-	github.com/mattn/go-sqlite3 v1.9.0
+	github.com/mattn/go-sqlite3 v1.14.16
 	github.com/rubenv/sql-migrate v0.0.0-20190717103323-87ce952f7079
 	github.com/stellar/go v0.0.0-20221129134138-040f30518bc4
 )
 
 require (
-	github.com/Masterminds/squirrel v1.5.0 // indirect
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 // indirect
 	github.com/bits-and-blooms/bitset v1.3.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
@@ -44,8 +44,8 @@ require (
 	github.com/prometheus/procfs v0.0.0-20190117184657-bf6a532e95b1 // indirect
 	github.com/segmentio/go-loggly v0.5.1-0.20171222203950-eb91657e62b2 // indirect
 	github.com/sirupsen/logrus v1.4.1 // indirect
-	github.com/stretchr/objx v0.3.0 // indirect
-	github.com/stretchr/testify v1.7.2 // indirect
+	github.com/stretchr/objx v0.4.0 // indirect
+	github.com/stretchr/testify v1.8.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
 	golang.org/x/net v0.0.0-20220607020251-c690dde0001d // indirect
