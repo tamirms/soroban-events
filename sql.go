@@ -41,6 +41,19 @@ func newSQLiteEventsDB(dbFilePath string) (eventsDB, error) {
 	}, nil
 }
 
+func newPostgresEventsDB(dsn string) (eventsDB, error) {
+	session, err := db.Open("postgres", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlEventsDB{
+		session:            session,
+		maxIngestBatchSize: 100000,
+		maxQueryBatchSize:  100000,
+	}, nil
+}
+
 func runMigrations(db *sql.DB) error {
 	m := &migrate.AssetMigrationSource{
 		Asset: migrations.ReadFile,
