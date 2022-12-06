@@ -37,6 +37,8 @@ func newEventsDB(dbType, dbFilePath string) eventsDB {
 		e, err = newSQLiteEventsDB(dbFilePath)
 	case "postgres":
 		e, err = newPostgresEventsDB(dbFilePath)
+	case "memory":
+		e, err = newMemoryEventsDB(dbFilePath)
 	default:
 		log.Fatalf("invalid database type: %v", dbType)
 	}
@@ -58,7 +60,7 @@ type eventsQuery struct {
 func ingestCmd(ingestFlags *flag.FlagSet) {
 	inputJSONFile := ingestFlags.String("input-json", "", "the json file containing the events")
 	dbFilePath := ingestFlags.String("db-file", "", "file path of the database")
-	dbType := ingestFlags.String("db", "", "the type of database to use: badger, postgres, or sqlite")
+	dbType := ingestFlags.String("db", "", "the type of database to use: badger, postgres, sqlite, or memory")
 	ingestFlags.Parse(os.Args[2:])
 
 	file, err := os.Open(*inputJSONFile)
@@ -82,7 +84,7 @@ func queryCmd(queryFlags *flag.FlagSet) {
 	startBlock := queryFlags.Uint64("start", 16007143, "the starting block which will be included in the filter")
 	endBlock := queryFlags.Uint64("end", 16007143+2000, "the ending block which will be included in the filter")
 	dbFilePath := queryFlags.String("db-file", "", "file path of the database")
-	dbType := queryFlags.String("db", "", "the type of database to use: badger, postgres, or sqlite")
+	dbType := queryFlags.String("db", "", "the type of database to use: badger, postgres, sqlite, or memory")
 	queryFlags.Parse(os.Args[2:])
 
 	q := eventsQuery{
@@ -103,7 +105,7 @@ func queryCmd(queryFlags *flag.FlagSet) {
 
 func benchmarkCmd(benchmarkFlags *flag.FlagSet) {
 	dbFilePath := benchmarkFlags.String("db-file", "", "file path of the database")
-	dbType := benchmarkFlags.String("db", "", "the type of database to use: badger, postgres, or sqlite")
+	dbType := benchmarkFlags.String("db", "", "the type of database to use: badger, postgres, sqlite, or memory")
 	requestsFlag := benchmarkFlags.Int("requests", 1000, "total number of requests")
 	threadsFlag := benchmarkFlags.Int("threads", runtime.NumCPU(), "number of goroutine workers")
 	target := benchmarkFlags.String("target", tetherAddress.String(), "the smart contract address which will be included in the filter")
